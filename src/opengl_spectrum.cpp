@@ -6,6 +6,16 @@
  *  See LICENSE.md for more information.
  */
 
+
+/*
+ *  Mon Dec 08 23:59:59 CET 2020
+ *  Modified by Captain Geek < CaptainGeek@users.noreply.github.com> to add the following:
+ *  * true FFT display (since the previous implementation used wave data with some weird algorithm).
+ *  * color types of the bars.
+ *  * DoxyGen style function comments.
+ *  * shuffled arround a bunch of things.
+ */
+
 /*
  *  Wed May 24 10:49:37 CDT 2000
  *  Fixes to threading/context creation for the nVidia X4 drivers by
@@ -19,8 +29,43 @@
  *  Ported to GLES 2.0 by Gimli
  */
 
+/* MACRO DEFINES */
+/* Defines the number of bars to display in the X and Y planes, uses the same number for both. */
+#define NUM_BARS  (16U)
+
+
+
+/* The "__STDC_LIMIT_MACROS" define is not really self explanatory, so I did an inquiry: */
+/* */
+/* Explanation of the macros from Dingo on StackExchange */
+/* __STDC_LIMIT_MACROS and __STDC_CONSTANT_MACROS are a workaround to allow C++ programs to use        */
+/* stdint.h macros specified in the C99 standard that aren't in the C++ standard. The macros,          */
+/* such as UINT8_MAX, INT64_MIN, and INT32_C() may be defined already in C++ applications in other     */
+/* ways. To allow the user to decide if they want the macros defined as C99 does, many implementations */
+/* require that __STDC_LIMIT_MACROS and __STDC_CONSTANT_MACROS be defined before stdint.h is included. */
+/* This isn't part of the C++ standard, but it has been adopted by more than one implementation.       */
+/* */
+/* Explanation of the macros from laalto on StackExchange */
+/* In stdint.h under C++, they control whether to define macros like INT32_MAX or INT32_C(v). */
+/* See your platform's stdint.h for additional information.*/
+/* */
+/* Explanation of the macros from malat on StackExchange */
+/* The above issue has vanished. C99 is an old standard, so this has been explicitly overruled in the 
+/* C++11 standard, and as a consequence C11 has removed this rule.*/
+/* */
+/* More details there: */
+/*    https://sourceware.org/bugzilla/show_bug.cgi?id=15366 */
 #define __STDC_LIMIT_MACROS
 
+/* The definition of PI is OUT OF PLACE, it should not be here, on Ubuntu Linux this was not needed */
+/* If it is needed, then it means there is another problem */
+/*
+#ifndef M_PI
+#define M_PI 3.141592654f
+#endif
+*/
+
+/* INCLUDES */
 #include <kodi/addon-instance/Visualization.h>
 #include <kodi/gui/gl/GL.h>
 #include <kodi/gui/gl/Shader.h>
@@ -33,12 +78,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#ifndef M_PI
-#define M_PI 3.141592654f
-#endif
-
-#define NUM_BANDS 16
-
+/* CLASS DEFINITION */
 class ATTRIBUTE_HIDDEN CVisualizationSpectrum
   : public kodi::addon::CAddonBase,
     public kodi::addon::CInstanceVisualization,
@@ -57,52 +97,70 @@ public:
   void OnCompiledAndLinked() override;
   bool OnEnabled() override;
 
+  void GetInfo(bool &wantsFreq, int &syncDelay) override;
+
 private:
+  // Setter functions
   void SetBarHeightSetting(int settingValue);
   void SetSpeedSetting(int settingValue);
   void SetModeSetting(int settingValue);
+  void SetBarColorSetting(int settingValue);
+  void SetRotationSpeedSetting(int settingValue);
 
-  GLfloat m_heights[16][16];
-  GLfloat m_cHeights[16][16];
-  GLfloat m_scale;
-  GLenum m_mode;
+  GLfloat   m_heights [NUM_BARS][NUM_BARS];
+  GLfloat   m_scale;
+  GLenum    m_mode;
   float m_y_angle, m_y_speed, m_y_fixedAngle;
   float m_x_angle, m_x_speed;
   float m_z_angle, m_z_speed;
-  float m_hSpeed;
+  int   m_updateLag;
 
+  // Helper functions
   void draw_bar(GLfloat x_offset, GLfloat z_offset, GLfloat height, GLfloat red, GLfloat green, GLfloat blue);
-  void draw_bars(void);
+  void draw_all_bars(void);
 
-  // Shader related data
+  // Private data
+  int   m_bar_color_type;
+  bool  m_debugInfoAlreadyDisplayed = false;
+
   glm::mat4 m_projMat;
   glm::mat4 m_modelMat;
-  GLfloat m_pointSize = 0.0f;
+  GLfloat   m_pointSize = 0.0f;
+
   std::vector<glm::vec3> m_vertex_buffer_data;
   std::vector<glm::vec3> m_color_buffer_data;
+  #ifdef HAS_GL
+    GLuint  m_vertexVBO[2] = {0};
+  #endif
 
-#ifdef HAS_GL
-  GLuint m_vertexVBO[2] = {0};
-#endif
+  // Shader related data
+  GLint     m_uProjMatrix = -1;
+  GLint     m_uModelMatrix = -1;
+  GLint     m_uPointSize = -1;
+  GLint     m_hPos = -1;
+  GLint     m_hCol = -1;
 
-  GLint m_uProjMatrix = -1;
-  GLint m_uModelMatrix = -1;
-  GLint m_uPointSize = -1;
-  GLint m_hPos = -1;
-  GLint m_hCol = -1;
-
-  bool m_startOK = false;
+  bool  m_startOK = false;
 };
 
+
+/* CLASS IMPLEMENTATION */
+
+/**
+ * Class constructor.
+ *
+ * It constructrs... :)
+ */
 CVisualizationSpectrum::CVisualizationSpectrum()
   : m_mode(GL_TRIANGLES),
     m_y_angle(45.0f),
-    m_y_speed(0.5f),
+    m_y_speed(1.5f),
     m_x_angle(20.0f),
     m_x_speed(0.0f),
     m_z_angle(0.0f),
-    m_z_speed(0.0f),
-    m_hSpeed(0.05f)
+    m_z_speed(0.0f), // Setting the speed to zero will disable rotation around that axis.
+    m_updateLag(0),  // Previously this was named m_hSpeed, which is not pertinent anymmore.
+    m_bar_color_type(0)
 {
   m_scale = 1.0 / log(256.0);
 
@@ -111,10 +169,27 @@ CVisualizationSpectrum::CVisualizationSpectrum()
   SetModeSetting(kodi::GetSettingInt("mode"));
   m_y_fixedAngle = kodi::GetSettingInt("rotation_angle");
 
+  SetBarColorSetting (kodi::GetSettingInt("bar_color_type"));
+  SetRotationSpeedSetting(kodi::GetSettingInt("rotation_speed"));
+
   m_vertex_buffer_data.resize(48);
   m_color_buffer_data.resize(48);
+
+  kodi::Log(ADDON_LOG_INFO, "Spectrumolator construction completed...");
 }
 
+
+/**
+ * Start function of CVisualizationSpectrum class.
+ *
+ * TBI (add description)
+ * This description is not based on the documentation.
+ *
+ * @param[in] channels
+ * @param[in] samplesPerSec
+ * @param[in] bitsPerSample
+ * @param[in] songName
+ */
 bool CVisualizationSpectrum::Start(int channels, int samplesPerSec, int bitsPerSample, std::string songName)
 {
   (void)channels;
@@ -132,21 +207,23 @@ bool CVisualizationSpectrum::Start(int channels, int samplesPerSec, int bitsPerS
 
   int x, y;
 
-  for(x = 0; x < 16; x++)
+  for(x = 0; x < NUM_BARS; x++)
   {
-    for(y = 0; y < 16; y++)
+    for(y = 0; y < NUM_BARS; y++)
     {
       m_heights[y][x] = 0.0f;
-      m_cHeights[y][x] = 0.0f;
     }
   }
 
+/*
+  //Removed superfluous initialiation of member variables, this is the job of the constructor!
   m_x_speed = 0.0f;
   m_y_speed = 0.5f;
   m_z_speed = 0.0f;
   m_x_angle = 20.0f;
   m_y_angle = 45.0f;
   m_z_angle = 0.0f;
+*/
 
   m_projMat = glm::frustum(-1.0f, 1.0f, -1.0f, 1.0f, 1.5f, 10.0f);
 
@@ -158,6 +235,14 @@ bool CVisualizationSpectrum::Start(int channels, int samplesPerSec, int bitsPerS
   return true;
 }
 
+
+/**
+ * Stop function of CVisualizationSpectrum class.
+ *
+ * TBI (add description)
+ * This description is not based on the documentation.
+ *
+ */
 void CVisualizationSpectrum::Stop()
 {
   if (!m_startOK)
@@ -173,9 +258,11 @@ void CVisualizationSpectrum::Stop()
 #endif
 }
 
-//-- Render -------------------------------------------------------------------
-// Called once per frame. Do all rendering here.
-//-----------------------------------------------------------------------------
+/**
+ * Rendering function.
+ *
+ * Called once per frame. Do all rendering here.
+ */
 void CVisualizationSpectrum::Render()
 {
   if (!m_startOK)
@@ -190,7 +277,7 @@ void CVisualizationSpectrum::Render()
   glVertexAttribPointer(m_hCol, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat)*3, nullptr);
   glEnableVertexAttribArray(m_hCol);
 #else
-  // 1rst attribute buffer : vertices
+  // 1st attribute buffer : vertices
   glEnableVertexAttribArray(m_hPos);
   glVertexAttribPointer(m_hPos, 3, GL_FLOAT, GL_FALSE, 0, &m_vertex_buffer_data[0]);
 
@@ -235,7 +322,7 @@ void CVisualizationSpectrum::Render()
 
   EnableShader();
 
-  draw_bars();
+  draw_all_bars();
 
   DisableShader();
 
@@ -269,6 +356,20 @@ bool CVisualizationSpectrum::OnEnabled()
   return true;
 }
 
+
+
+/**
+ * Function to draw one bar.
+ *
+ * Called only from draw_all_bars() function.
+ *
+ * @param GLfloat x_offset
+ * @param GLfloat z_offset
+ * @param GLfloat height
+ * @param GLfloat red
+ * @param GLfloat green
+ * @param GLfloat blue
+ */
 void CVisualizationSpectrum::draw_bar(GLfloat x_offset, GLfloat z_offset, GLfloat height, GLfloat red, GLfloat green, GLfloat blue )
 {
   GLfloat width = 0.1f;
@@ -419,70 +520,166 @@ void CVisualizationSpectrum::draw_bar(GLfloat x_offset, GLfloat z_offset, GLfloa
   glDrawArrays(m_mode, 0, m_vertex_buffer_data.size()); /* 12*3 indices starting at 0 -> 12 triangles + 4*3 to have on lines show correct */
 }
 
-void CVisualizationSpectrum::draw_bars(void)
+
+/**
+ * Function to draw all the bars (it's in the name).
+ *
+ * Called only from CVisualizationSpectrum::Render() function.
+ *
+ */
+void CVisualizationSpectrum::draw_all_bars(void)
 {
-  int x, y;
-  GLfloat x_offset, z_offset, r_base, b_base;
+  int x;
+  int y;
+  GLfloat x_offset;
+  GLfloat y_offset;
+  GLfloat r_base;
+  GLfloat b_base;
+  GLfloat rgb_component_r;
+  GLfloat rgb_component_g;
+  GLfloat rgb_component_b;
 
-  for(y = 0; y < 16; y++)
+  for(y = 0; y < NUM_BARS; y++)
   {
-    z_offset = -1.6 + ((15 - y) * 0.2);
+    y_offset = -1.6 + ((NUM_BARS - y) * 0.2);
 
-    b_base = y * (1.0 / 15);
+    b_base = y * (1.0 / NUM_BARS);
     r_base = 1.0 - b_base;
 
-    for(x = 0; x < 16; x++)
+    for(x = 0; x < NUM_BARS; x++)
     {
       x_offset = -1.6 + ((float)x * 0.2);
-      if (::fabs(m_cHeights[y][x]-m_heights[y][x])>m_hSpeed)
+
+      switch(m_bar_color_type)
       {
-        if (m_cHeights[y][x]<m_heights[y][x])
-          m_cHeights[y][x] += m_hSpeed;
-        else
-          m_cHeights[y][x] -= m_hSpeed;
-      }
-      draw_bar(x_offset, z_offset, m_cHeights[y][x], r_base - (float(x) * (r_base / 15.0)), (float)x * (1.0 / 15), b_base);
-    }
-  }
+        case 2:
+          /* Two gradient color */
+          rgb_component_r = 1.0f - (float(x) - float(NUM_BARS))/float(NUM_BARS);
+          rgb_component_g = (float(x) - float(NUM_BARS))/float(NUM_BARS);
+          rgb_component_b = 0.0f;
+          break;
+
+        case 1:
+          /* One solid color */
+          rgb_component_r = 1;
+          rgb_component_g = 0;
+          rgb_component_b = 0;
+          break;
+
+        case 0:
+        default:
+          // Original code... which is a bit arbitrary
+          rgb_component_r = r_base - (float(x) * (r_base / float(NUM_BARS))); /* R component */
+          rgb_component_g = (float)x * (1.0 / float(NUM_BARS));                 /* G component */
+          rgb_component_b = b_base;                                /* B component */
+          break;
+      };
+
+      draw_bar( x_offset,            /* X Offset */
+                y_offset,            /* Y Offset */
+                m_heights[y][x],     /* Height */
+                rgb_component_r,     /* R component */
+                rgb_component_g,     /* G component */
+                rgb_component_b);    /* B component */
+    };
+  };
 }
 
+
+
+/**
+ * GetInfo function of CVisualizationSpectrum class.
+ * 
+ * Used to get the number of buffers from the current visualization.
+ *
+ * DoxyGen location: https://alwinesch.github.io/group__cpp__kodi__addon__visualization.html#ga5357e3fc0644da927689ec6161b2ef46
+ *   virtual void GetInfo  ( bool &  wantsFreq, int &  syncDelay )   
+ *
+ * Note
+ * If this function is not implemented, it will default to wantsFreq = false and syncDelay = 0.
+ *
+ * Parameters
+ * @param[out] wantsFreq Indicates whether the add-on wants FFT data. If set to true, the freqData and freqDataLength parameters of AudioData() are used.
+ * @param[out] syncDelay The number of buffers to delay before calling AudioData().
+ */ 
+void CVisualizationSpectrum::GetInfo(bool &wantsFreq, int &syncDelay)
+{
+  wantsFreq = true;
+  syncDelay = m_updateLag;
+}
+
+
+/**
+ * Implements the audio processing function.
+ *
+ * It performs a re-scaling of the number of "iFreqDataLength" FFT samples pointed by "pFreqData" to the NUM_BARS of bars.
+ * The "GetInfo()" member function needs to be be overriden with a function to return "true" for the "wantsFFT" out parameter.
+ * Otherwise, "iFreqDataLength" is always zero, when this function is called.
+ *
+ * @param[in] pAudioData 
+ * @param[in] iAudioDataLength 
+ * @param[in] pFreqData 
+ * @param[in] iFreqDataLength
+ */
 void CVisualizationSpectrum::AudioData(const float* pAudioData, int iAudioDataLength, float *pFreqData, int iFreqDataLength)
 {
-  int i,c;
-  int y=0;
-  GLfloat val;
-
-  int xscale[] = {0, 1, 2, 3, 5, 7, 10, 14, 20, 28, 40, 54, 74, 101, 137, 187, 255};
-
-  for(y = 15; y > 0; y--)
+  int x, y, c;
+  int dividerOfFFTSamples;
+  float *pTempFreqData;
+  
+  /* Shift the old data by one row backwards, no matter what we are going to display. Since, you know: "Tempus fugit!" */
+  for (y = (NUM_BARS-1); y > 0; y--)
   {
-    for(i = 0; i < 16; i++)
+    for (x = 0; x < NUM_BARS; x++)
     {
-      m_heights[y][i] = m_heights[y - 1][i];
-    }
+      m_heights[y][x] = m_heights[y - 1][x];
+    };
+  };
+
+  /* If the number of FFT samples are less than the number of bars, we have a problem. */
+  if (iFreqDataLength < NUM_BARS)
+  {
+    /* No valid FFT data, bailing out! But first, populate the buffer with some stuff, just in case. */
+    for (x = 0; x < NUM_BARS; x++)
+      m_heights[y][x] = -1.0f;
+    
+    kodi::Log(ADDON_LOG_ERROR, "iFreqDataLength=%d but we expected a number greater than: %d", iFreqDataLength, NUM_BARS);
   }
-
-  for(i = 0; i < NUM_BANDS; i++)
+  else
   {
-    for(c = xscale[i], y = 0; c < xscale[i + 1]; c++)
+    /* Fetch the FFT data and convert it to the bar height that we want to display by shifting the bars to produce a time series... */
+    
+    dividerOfFFTSamples = iFreqDataLength / NUM_BARS;
+    pTempFreqData = pFreqData;
+
+    /* Display some debug info, but only once... */
+    if (m_debugInfoAlreadyDisplayed == false)
     {
-      if (c<iAudioDataLength)
+      kodi::Log(ADDON_LOG_DEBUG, "iAudioDataLength=%d, iFreqDataLength=%d, dividerOfFFTSamples=%d", iAudioDataLength, iFreqDataLength, dividerOfFFTSamples);
+      m_debugInfoAlreadyDisplayed = true;
+    };
+
+    /* Computate the new data to vizualize */
+    /* On my testing we get 256 FFT samples, that we want to show with 16 bars, therefore 16 FFT samples will be summed up into on bar's height. */
+    for (x = 0; x < NUM_BARS; x++)
+    {
+      m_heights[0][x] = 0.0f;
+      for (c = 0; c < dividerOfFFTSamples; c++)
       {
-        if((int)(pAudioData[c] * (INT16_MAX)) > y)
-          y = (int)(pAudioData[c] * (INT16_MAX));
-      }
-      else
-        continue;
-    }
-    y >>= 7;
-    if(y > 0)
-      val = (logf(y) * m_scale);
-    else
-      val = 0;
-    m_heights[0][i] = val;
-  }
-}
+        m_heights[0][x] += *pTempFreqData;
+        pTempFreqData++;
+      };
+      //m_heights[0][x] = m_heights[0][x] / (float)dividerOfFFTSamples;
+    };
+    
+  };  /*End of: if (iFreqDataLength <= 0)*/
+} /* End of the function: CVisualizationSpectrum::AudioData :) */
 
+
+
+
+
+/* SETTER FUNCTIONS */
 void CVisualizationSpectrum::SetBarHeightSetting(int settingValue)
 {
   switch (settingValue)
@@ -510,32 +707,6 @@ void CVisualizationSpectrum::SetBarHeightSetting(int settingValue)
   }
 }
 
-void CVisualizationSpectrum::SetSpeedSetting(int settingValue)
-{
-  switch (settingValue)
-  {
-  case 1:
-    m_hSpeed = 0.025f;
-    break;
-
-  case 2:
-    m_hSpeed = 0.0125f;
-    break;
-
-  case 3:
-    m_hSpeed = 0.1f;
-    break;
-
-  case 4:
-    m_hSpeed = 0.2f;
-    break;
-
-  case 0:
-  default:
-    m_hSpeed = 0.05f;
-    break;
-  }
-}
 
 void CVisualizationSpectrum::SetModeSetting(int settingValue)
 {
@@ -559,10 +730,67 @@ void CVisualizationSpectrum::SetModeSetting(int settingValue)
   }
 }
 
-//-- SetSetting ---------------------------------------------------------------
-// Set a specific Setting value (called from Kodi)
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
+void CVisualizationSpectrum::SetSpeedSetting(int settingValue)
+{
+  /* Acceptable values should be: positive integers up to a reasonable limit (let's say 4, for now:) */
+  if ((settingValue >= 0) && (settingValue <= 4))
+  {
+    m_updateLag = settingValue;
+  };
+}
+
+void CVisualizationSpectrum::SetBarColorSetting(int settingValue)
+{
+  // TBI add an upper limit (for peace of mind) to the validation, but at the moment we don't really know how many color schemes will be supported.
+  if (settingValue >= 0)
+    m_bar_color_type = settingValue;
+}
+
+void CVisualizationSpectrum::SetRotationSpeedSetting(int settingValue)
+{
+  switch (settingValue)
+  {
+  case 4:
+    m_y_speed = 10.0f;
+    break;
+  case 3:
+    m_y_speed = 6.0f;
+    break;
+  case 2:
+    m_y_speed = 3.0f;
+    break;
+  case 1:
+    m_y_speed = 1.5f;
+    break;
+  case 0:
+  default:
+    m_y_speed = 0.5f;
+    break;
+  case -1:
+    m_y_speed = 0.25f;
+    break;
+  case -2:
+    m_y_speed = 0.0625f;
+    break;
+  case -3:
+    m_y_speed = 0.03125f;
+    break;
+  case -4:
+    m_y_speed = 0.015625f;
+    break;
+  };
+}
+
+
+/**
+ * Brief description.
+ *
+ * Sets specific Setting value (called from Kodi)
+ * Add-on master function.
+ *
+ * @param[in] settingName
+ * @param[in] settingValue
+ */
 ADDON_STATUS CVisualizationSpectrum::SetSetting(const std::string& settingName, const kodi::CSettingValue& settingValue)
 {
   if (settingName.empty() || settingValue.empty())
@@ -588,8 +816,32 @@ ADDON_STATUS CVisualizationSpectrum::SetSetting(const std::string& settingName, 
     m_y_fixedAngle = settingValue.GetInt();
     return ADDON_STATUS_OK;
   }
+  else if (settingName == "bar_color_type")
+  {
+    SetBarColorSetting(settingValue.GetInt());
+    return ADDON_STATUS_OK;
+  }
+  else if (settingName == "rotation_speed")
+  {
+    SetRotationSpeedSetting(settingValue.GetInt());
+    return ADDON_STATUS_OK;
+  }
 
   return ADDON_STATUS_UNKNOWN;
 }
+
+/**
+ * Doxygen function commenting style, included here for reference only. TBI: can be deleted later.
+ * Fetched from: https://www.doxygen.nl/manual/docblocks.html 
+ */
+
+/**
+ * Brief description.
+ *
+ * Detailed description.
+ *
+ * @param paramName Parameter description. 
+ */
+
 
 ADDONCREATOR(CVisualizationSpectrum)

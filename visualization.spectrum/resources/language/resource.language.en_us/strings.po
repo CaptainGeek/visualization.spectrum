@@ -33,8 +33,8 @@ msgid "Points"
 msgstr "Points"
 
 msgctxt "#30004"
-msgid "Bar Height"
-msgstr "Bar Height"
+msgid "Bar height"
+msgstr "Bar height"
 
 msgctxt "#30005"
 msgid "Small"
@@ -49,16 +49,16 @@ msgid "Big"
 msgstr "Big"
 
 msgctxt "#30008"
-msgid "Very Big"
-msgstr "Very Big"
+msgid "Very big"
+msgstr "Very big"
 
 msgctxt "#30009"
-msgid "Speed"
-msgstr "Speed"
+msgid "Update speed (lag)"
+msgstr "Update speed (lag)"
 
 msgctxt "#30010"
-msgid "Very Slow"
-msgstr "Very Slow"
+msgid "Very slow"
+msgstr "Very slow"
 
 msgctxt "#30011"
 msgid "Slow"
@@ -73,16 +73,16 @@ msgid "Fast"
 msgstr "Fast"
 
 msgctxt "#30014"
-msgid "Very Fast"
-msgstr "Very Fast"
+msgid "Very fast"
+msgstr "Very fast"
 
 msgctxt "#30015"
 msgid "Point size"
 msgstr "Point size"
 
 msgctxt "#30016"
-msgid "%i pixel"
-msgstr "%i pixel"
+msgid "%i pixel(s)"
+msgstr "%i pixel(s)"
 
 msgctxt "#30017"
 msgid "Rotation position"
@@ -95,3 +95,41 @@ msgstr "%i°"
 msgctxt "#30019"
 msgid "Turn continuously"
 msgstr "Turn continuously"
+
+
+msgctxt "#30100"
+msgid "Bar color scheme"
+msgstr "Bar color scheme"
+
+msgctxt "#30101"
+msgid "Rainbow colored bars"
+msgstr "Rainbow colored bars"
+
+msgctxt "#30102"
+msgid "One solid color"
+msgstr "One solid color"
+
+msgctxt "#30103"
+msgid "Two gradient colors"
+msgstr "Two gradient colors"
+
+
+msgctxt "#30200"
+msgid "Rotation speed"
+msgstr "Rotation speed"
+
+msgctxt "#30201"
+msgid "Crawling slow"
+msgstr "Crawling slow"
+
+msgctxt "#30202"
+msgid "Dead slow"
+msgstr "Dead slow"
+
+msgctxt "#30203"
+msgid "Ultra fast"
+msgstr "Ultra fast"
+
+msgctxt "#30204"
+msgid "Wow fast"
+msgstr "Wow fast"
